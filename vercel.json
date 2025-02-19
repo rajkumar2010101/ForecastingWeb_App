@@ -1,0 +1,13 @@
+{
+    "version": 2,
+    "builds": [
+        {
+            "src": "ForecastingFlask_app.py", "use": "@vercel/python"
+        }
+    ],
+    "routes": [
+        {
+            "src": "/(.*)", "dest": "ForecastingFlask_app.py"
+        }
+    ]
+}

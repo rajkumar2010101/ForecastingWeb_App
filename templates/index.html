@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Call Volume Forecasting App</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <nav style="display: flex; background-color: black; position: fixed; top: 0; width: 100%; padding: 10px;">
+    <a href="/"><p style="color: white; margin: 0 15px; font-size: 18px; cursor: pointer;">Home</p></a>    
+    <a href="/about"><p style="color: white; margin: 0 15px; font-size: 18px; cursor: pointer;">About</p></a>    
+    </nav>
+    
+    <div class="container">
+        <h1>WFM Forecasting Calculator</h1>
+        
+        <!-- File Upload Section -->
+        <div class="upload-section">
+            <h2>Upload Your Data</h2>
+            <form id="uploadForm">
+                <input type="file" name="file" id="file" accept=".csv,.xls,.xlsx">
+                <button type="submit">Upload Data</button>
+            </form>
+            <p id="uploadStatus"></p>
+        </div>
+
+        <!-- Select Forecasting Model Section -->
+        <div class="model-selection-section" id="modelSelectionSection" style="display: none;">
+            <h2>Select Forecasting Model</h2>
+            <select id="modelSelect">
+                <option value="ARIMA">ARIMA</option>
+                <option value="RandomForecast">Random Forecast</option>
+                <option value="HoltWinters">Holt-Winters</option>
+            </select>
+            <button id="predictButton">Predict Next Week</button>
+        </div>
+
+        <!-- Dataset Information Section -->
+        <div class="info-section" id="infoSection" style="display: none;">
+            <h2>Dataset Information</h2>
+            <p id="datasetInfo"></p>
+        </div>
+
+        <!-- Result Section -->
+        <div class="result-section">
+            <div id="forecastResult"></div>
+            <canvas id="chart"></canvas>
+        </div>
+    </div>
+
+    <script>
+        let chartInstance = null;
+
+        // Handle file upload
+        document.getElementById('uploadForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const formData = new FormData();
+            formData.append('file', document.getElementById('file').files[0]);
+
+            fetch('/upload', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('uploadStatus').innerText = data.message || data.error;
+                if (data.message) {
+                    document.getElementById('modelSelectionSection').style.display = 'block';
+                    document.getElementById('infoSection').style.display = 'block';
+                    document.getElementById('datasetInfo').textContent = data.message;
+                }
+            });
+        });
+
+        // Handle prediction with selected model
+        document.getElementById('predictButton').addEventListener('click', function() {
+            const selectedModel = document.getElementById('modelSelect').value;
+
+            fetch('/predict', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ model: selectedModel })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    document.getElementById('forecastResult').innerText = data.error;
+                } else {
+                    document.getElementById('forecastResult').innerHTML = `
+                        <h3>Next Week Forecast</h3>
+                        <ul>
+                            ${Object.entries(data.forecasts).map(([day, value]) => `
+                                <li>${day}: <strong>${value}</strong> calls 
+                                    (Error Margin: ${data.accuracy[day]?.toFixed(1) || 'N/A'}%)</li>
+                            `).join('')}
+                        </ul>
+                    `;
+
+                    // Update chart only if data is valid
+                    if (data.next_week_dates && data.forecasts) {
+                        updateChart(data.next_week_dates, Object.values(data.forecasts));
+                    }
+                }
+            });
+        });
+
+        // Update chart with forecasted data
+        function updateChart(dates, values) {
+            const ctx = document.getElementById('chart').getContext('2d');
+            
+            // Destroy existing chart instance
+            if (chartInstance) {
+                chartInstance.destroy();
+            }
+
+            chartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: dates,
+                    datasets: [{
+                        label: 'Call Volume',
+                        data: values,
+                        fill: true,
+                        backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                        borderColor: 'rgba(54, 162, 235, 1)',
+                        tension: 0.1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        x: {
+                            title: { display: true, text: 'Date' }
+                        },
+                        y: {
+                            title: { display: true, text: 'Calls' },
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+        }
+    </script>
+</body>
+</html>
